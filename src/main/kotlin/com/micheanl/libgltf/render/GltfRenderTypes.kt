@@ -1,0 +1,163 @@
+package com.micheanl.libgltf.render
+
+import com.micheanl.libgltf.LibGltf
+import com.micheanl.libgltf.material.AlphaMode
+import com.micheanl.libgltf.material.GltfMaterial
+import com.micheanl.libgltf.model.PrimitiveMode
+import com.micheanl.libgltf.render.gpu.GltfGpuFormats
+import com.micheanl.libgltf.render.iris.IrisCompat
+import com.mojang.blaze3d.GpuFormat
+import com.mojang.blaze3d.PrimitiveTopology
+import com.mojang.blaze3d.pipeline.BindGroupLayout
+import com.mojang.blaze3d.pipeline.BlendFunction
+import com.mojang.blaze3d.pipeline.ColorTargetState
+import com.mojang.blaze3d.pipeline.RenderPipeline
+import com.mojang.blaze3d.shaders.UniformType
+import com.mojang.blaze3d.vertex.DefaultVertexFormat
+import net.minecraft.client.renderer.BindGroupLayouts
+import net.minecraft.client.renderer.RenderPipelines
+import net.minecraft.client.renderer.rendertype.RenderSetup
+import net.minecraft.client.renderer.rendertype.RenderType
+import net.minecraft.resources.Identifier
+import java.util.concurrent.ConcurrentHashMap
+
+private val JOINT_MATRICES_LAYOUT = BindGroupLayout.builder()
+    .withUniform("JointMatrices", UniformType.TEXEL_BUFFER, GpuFormat.RGBA32_FLOAT)
+    .build()
+
+object GltfRenderTypes {
+    private val resources = ConcurrentHashMap<Long, ConcurrentHashMap<Long, RenderType>>()
+    private val gpuResources = ConcurrentHashMap<Long, ConcurrentHashMap<Long, RenderType>>()
+
+    fun get(
+        resourceId: Long,
+        materialIndex: Int,
+        textureIndex: Int,
+        alphaCutoff: Float,
+        mode: PrimitiveMode,
+        material: GltfMaterial,
+        texture: Identifier
+    ): RenderType {
+        val cache = resources.computeIfAbsent(resourceId) { ConcurrentHashMap() }
+        val key = key(materialIndex, textureIndex, alphaCutoff, mode, false)
+        return cache.computeIfAbsent(key) {
+            create(resourceId, materialIndex, textureIndex, alphaCutoff, mode, material, texture)
+        }
+    }
+
+    fun getGpu(
+        resourceId: Long,
+        materialIndex: Int,
+        textureIndex: Int,
+        alphaCutoff: Float,
+        mode: PrimitiveMode,
+        material: GltfMaterial,
+        texture: Identifier,
+        skinned: Boolean
+    ): RenderType {
+        val cache = gpuResources.computeIfAbsent(resourceId) { ConcurrentHashMap() }
+        val key = key(materialIndex, textureIndex, alphaCutoff, mode, skinned)
+        return cache.computeIfAbsent(key) {
+            createGpu(resourceId, materialIndex, textureIndex, alphaCutoff, mode, material, texture, skinned)
+        }
+    }
+
+    fun remove(resourceId: Long) {
+        resources.remove(resourceId)
+        gpuResources.remove(resourceId)
+    }
+
+    private fun create(
+        resourceId: Long,
+        materialIndex: Int,
+        textureIndex: Int,
+        alphaCutoff: Float,
+        mode: PrimitiveMode,
+        material: GltfMaterial,
+        texture: Identifier
+    ): RenderType {
+        val suffix = "${resourceId}_${materialIndex}_${textureIndex}_${mode.ordinal}_${alphaCutoff.toBits()}"
+        val builder = RenderPipeline.builder(RenderPipelines.ENTITY_SNIPPET)
+            .withLocation(LibGltf.id("pipeline/runtime_$suffix"))
+            .withVertexShader(LibGltf.id("core/entity"))
+            .withFragmentShader(LibGltf.id("core/entity"))
+            .withBindGroupLayout(BindGroupLayouts.SAMPLER1)
+            .withVertexBinding(0, DefaultVertexFormat.ENTITY)
+            .withPrimitiveTopology(topology(mode))
+            .withCull(!material.doubleSided)
+        applyMaterial(builder, material, alphaCutoff)
+        val pipeline = builder.build()
+        IrisCompat.copyEntity(pipeline, material.alphaMode)
+        return createRenderType("libgltf_$suffix", pipeline, texture)
+    }
+
+    private fun createGpu(
+        resourceId: Long,
+        materialIndex: Int,
+        textureIndex: Int,
+        alphaCutoff: Float,
+        mode: PrimitiveMode,
+        material: GltfMaterial,
+        texture: Identifier,
+        skinned: Boolean
+    ): RenderType {
+        val suffix = "gpu_${resourceId}_${materialIndex}_${textureIndex}_${mode.ordinal}_${alphaCutoff.toBits()}_${if (skinned) 1 else 0}"
+        val builder = RenderPipeline.builder(RenderPipelines.ENTITY_SNIPPET)
+            .withLocation(LibGltf.id("pipeline/runtime_$suffix"))
+            .withVertexShader(LibGltf.id("core/entity_gpu"))
+            .withFragmentShader(LibGltf.id("core/entity"))
+            .withBindGroupLayout(BindGroupLayouts.SAMPLER1)
+            .withVertexBinding(0, GltfGpuFormats.GEOMETRY)
+            .withVertexBinding(1, GltfGpuFormats.INSTANCE)
+            .withPrimitiveTopology(topology(mode))
+            .withCull(!material.doubleSided)
+        if (skinned) {
+            builder
+                .withBindGroupLayout(JOINT_MATRICES_LAYOUT)
+                .withVertexBinding(2, GltfGpuFormats.SKIN)
+                .withShaderDefine("SKINNED")
+        }
+        applyMaterial(builder, material, alphaCutoff)
+        val pipeline = builder.build()
+        IrisCompat.copyEntity(pipeline, material.alphaMode)
+        return createRenderType("libgltf_$suffix", pipeline, texture)
+    }
+
+    private fun createRenderType(name: String, pipeline: RenderPipeline, texture: Identifier): RenderType {
+        val setup = RenderSetup.builder(pipeline)
+            .withTexture("Sampler0", texture)
+            .useLightmap()
+            .useOverlay()
+            .createRenderSetup()
+        return RenderType.create(name, setup)
+    }
+
+    private fun applyMaterial(builder: RenderPipeline.Builder, material: GltfMaterial, alphaCutoff: Float) {
+        when (material.alphaMode) {
+            AlphaMode.MASK -> builder.withShaderDefine("ALPHA_CUTOUT", alphaCutoff)
+            AlphaMode.BLEND -> builder.withColorTargetState(ColorTargetState(BlendFunction.TRANSLUCENT))
+            AlphaMode.OPAQUE -> builder.withShaderDefine("ALPHA_OPAQUE")
+        }
+    }
+
+    private fun key(
+        materialIndex: Int,
+        textureIndex: Int,
+        alphaCutoff: Float,
+        mode: PrimitiveMode,
+        skinned: Boolean
+    ): Long {
+        val modeMaterial = materialIndex.and(0x0FFF) or
+            (mode.ordinal.and(0x7) shl 12) or
+            (if (skinned) 1 shl 15 else 0)
+        return (modeMaterial.toLong() shl 48) or
+            ((textureIndex + 1).toLong().and(0xFFFFL) shl 32) or
+            alphaCutoff.toBits().toLong().and(0xFFFFFFFFL)
+    }
+
+    private fun topology(mode: PrimitiveMode): PrimitiveTopology = when (mode) {
+        PrimitiveMode.TRIANGLES -> PrimitiveTopology.TRIANGLES
+        PrimitiveMode.LINES -> PrimitiveTopology.LINES
+        PrimitiveMode.POINTS -> PrimitiveTopology.POINTS
+    }
+}

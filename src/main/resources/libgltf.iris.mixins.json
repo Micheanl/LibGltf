@@ -1,0 +1,14 @@
+{
+  "required": false,
+  "package": "com.micheanl.libgltf.mixin.iris",
+  "compatibilityLevel": "JAVA_25",
+  "plugin": "com.micheanl.libgltf.mixin.iris.IrisMixinPlugin",
+  "client": [
+    "GlCommandEncoderMixin",
+    "GlRenderPassAccessor",
+    "PbrTextureManagerMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

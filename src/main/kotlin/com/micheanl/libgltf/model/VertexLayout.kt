@@ -1,0 +1,14 @@
+package com.micheanl.libgltf.model
+
+object VertexLayout {
+    const val STRIDE: Int = 60
+    const val POSITION: Int = 0
+    const val NORMAL: Int = 12
+    const val TANGENT: Int = 24
+    const val UV0: Int = 40
+    const val UV1: Int = 48
+    const val COLOR: Int = 56
+    const val SKIN_STRIDE: Int = 16
+    const val JOINTS: Int = 0
+    const val WEIGHTS: Int = 8
+}

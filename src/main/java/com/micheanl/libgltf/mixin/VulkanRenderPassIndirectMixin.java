@@ -1,0 +1,92 @@
+package com.micheanl.libgltf.mixin;
+
+import com.micheanl.libgltf.render.gpu.GltfMeshletLod;
+import com.micheanl.libgltf.render.vulkan.GltfVulkanMeshPipelineCache;
+import com.micheanl.libgltf.render.vulkan.VulkanIndirectRenderPass;
+import com.micheanl.libgltf.render.vulkan.VulkanMeshRenderPass;
+import com.mojang.blaze3d.buffers.GpuBuffer;
+import com.mojang.blaze3d.buffers.GpuBufferSlice;
+import com.mojang.blaze3d.vulkan.VulkanGpuBuffer;
+import com.mojang.blaze3d.vulkan.VulkanRenderPass;
+import com.mojang.blaze3d.vulkan.VulkanRenderPipeline;
+import org.jspecify.annotations.Nullable;
+import org.lwjgl.vulkan.VK12;
+import org.lwjgl.vulkan.VkCommandBuffer;
+import org.lwjgl.vulkan.VkDrawIndexedIndirectCommand;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
+
+@Mixin(VulkanRenderPass.class)
+public abstract class VulkanRenderPassIndirectMixin implements VulkanIndirectRenderPass, VulkanMeshRenderPass {
+    @Shadow
+    protected @Nullable VulkanRenderPipeline pipeline;
+
+    @Shadow
+    private boolean hasDepth;
+
+    @Shadow
+    private VkCommandBuffer commandBuffer() {
+        throw new AssertionError();
+    }
+
+    @Shadow
+    private void pushDescriptors() {
+        throw new AssertionError();
+    }
+
+    @Override
+    public void drawIndexedIndirectCount(GpuBufferSlice commands, GpuBufferSlice count, int maxDrawCount) {
+        if (pipeline == null || !pipeline.isValid()) {
+            throw new IllegalStateException("Pipeline is missing or not valid");
+        }
+        pushDescriptors();
+        VK12.vkCmdDrawIndexedIndirectCount(
+                commandBuffer(),
+                ((VulkanGpuBuffer) commands.buffer()).vkBuffer(),
+                commands.offset(),
+                ((VulkanGpuBuffer) count.buffer()).vkBuffer(),
+                count.offset(),
+                maxDrawCount,
+                VkDrawIndexedIndirectCommand.SIZEOF
+        );
+    }
+
+    @Override
+    public boolean drawMeshTasks(
+            GltfVulkanMeshPipelineCache cache,
+            GpuBuffer geometry,
+            GpuBuffer instances,
+            GltfMeshletLod meshlets,
+            float[] sphere,
+            int instanceCount,
+            boolean instanceCulling,
+            boolean meshletCulling
+    ) {
+        if (pipeline == null || !pipeline.isValid()) {
+            return false;
+        }
+        VulkanRenderPipeline original = pipeline;
+        VulkanRenderPipeline descriptorPipeline = cache.descriptorPipeline(original);
+        if (descriptorPipeline == null) {
+            return false;
+        }
+        pipeline = descriptorPipeline;
+        try {
+            pushDescriptors();
+        } finally {
+            pipeline = original;
+        }
+        return cache.draw(
+                original,
+                commandBuffer(),
+                hasDepth,
+                geometry,
+                instances,
+                meshlets,
+                sphere,
+                instanceCount,
+                instanceCulling,
+                meshletCulling
+        );
+    }
+}

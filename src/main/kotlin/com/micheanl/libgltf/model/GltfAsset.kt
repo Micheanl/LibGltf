@@ -1,0 +1,21 @@
+package com.micheanl.libgltf.model
+
+import com.micheanl.libgltf.animation.AnimationClip
+import com.micheanl.libgltf.material.GltfMaterial
+
+data class GltfAsset(
+    val name: String,
+    val nodes: Array<GltfNode>,
+    val topologicalOrder: IntArray,
+    val sceneRoots: IntArray,
+    val meshes: Array<GltfMesh>,
+    val skins: Array<GltfSkin>,
+    val animations: Array<AnimationClip>,
+    val materials: Array<GltfMaterial>,
+    val textures: Array<GltfTexture>,
+    val images: Array<GltfImage>,
+    val bounds: FloatArray,
+    val stats: GltfStats,
+    val morphOffsets: IntArray,
+    val totalMorphWeights: Int
+)

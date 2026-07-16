@@ -1,0 +1,22 @@
+{
+  "required": true,
+  "package": "com.micheanl.libgltf.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "client": [
+    "GlDeviceMixin",
+    "GpuDeviceBackendAccessor",
+    "RenderPassBackendAccessor",
+    "RenderPipelineBuilderMixin",
+    "VulkanBackendMeshShaderMixin",
+    "VulkanBindGroupLayoutMeshShaderMixin",
+    "VulkanCommandEncoderAccessor",
+    "VulkanConstMixin",
+    "VulkanDeviceMixin",
+    "VulkanGpuSamplerMixin",
+    "VulkanRenderPassIndirectMixin",
+    "VulkanRenderPipelineMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
