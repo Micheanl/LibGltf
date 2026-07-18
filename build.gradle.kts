@@ -37,12 +37,17 @@ dependencies {
     val meshoptimizer = "org.lwjgl:lwjgl-meshoptimizer:$lwjglVersion"
     implementation(meshoptimizer)
     include(meshoptimizer)
-    runtimeOnly("$meshoptimizer:natives-windows")
-    runtimeOnly("$meshoptimizer:natives-windows-arm64")
-    runtimeOnly("$meshoptimizer:natives-windows-x86")
-    runtimeOnly("$meshoptimizer:natives-linux")
-    runtimeOnly("$meshoptimizer:natives-macos")
-    runtimeOnly("$meshoptimizer:natives-macos-arm64")
+    listOf(
+        "natives-windows",
+        "natives-windows-arm64",
+        "natives-windows-x86",
+        "natives-linux",
+        "natives-macos",
+        "natives-macos-arm64"
+    ).forEach { classifier ->
+        runtimeOnly("$meshoptimizer:$classifier")
+        include("$meshoptimizer:$classifier")
+    }
 }
 
 tasks.processResources {
