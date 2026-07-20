@@ -87,18 +87,19 @@ class GltfGpuSubmit(
                 cachedMaterialRevision != instance.materialRevision ||
                 cachedSkinned != skinned
         if (renderStateChanged) {
+            val overrideIdentifier = override?.baseColorIdentifier
             val overrideTextureIndex = override?.baseColorTextureIndex ?: -1
-            val textureIndex = if (overrideTextureIndex >= 0) {
-                overrideTextureIndex
-            } else {
-                material.baseColorTexture?.textureIndex ?: -1
+            val textureIndex = when {
+                overrideIdentifier != null -> overrideIdentifier.hashCode()
+                overrideTextureIndex >= 0 -> overrideTextureIndex
+                else -> material.baseColorTexture?.textureIndex ?: -1
             }
             val overrideCutoff = override?.alphaCutoff ?: Float.NaN
             val alphaCutoff = if (overrideCutoff.isNaN()) material.alphaCutoff else overrideCutoff
-            val texture = if (overrideTextureIndex >= 0) {
-                textures.identifier(overrideTextureIndex)
-            } else {
-                textures.materialIdentifier(materialIndex)
+            val texture = when {
+                overrideIdentifier != null -> overrideIdentifier
+                overrideTextureIndex >= 0 -> textures.identifier(overrideTextureIndex)
+                else -> textures.materialIdentifier(materialIndex)
             }
             renderType = GltfRenderTypes.getGpu(
                 resource.id,

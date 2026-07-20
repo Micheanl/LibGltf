@@ -57,18 +57,19 @@ class GltfGeometryRenderer(
         val materialIndex = instance.resolveMaterial(sourceMaterialIndex)
         val material = asset.materials[materialIndex]
         val override = instance.materialOverrides[sourceMaterialIndex]
+        val overrideIdentifier = override?.baseColorIdentifier
         val overrideTextureIndex = override?.baseColorTextureIndex ?: -1
-        val textureIndex = if (overrideTextureIndex >= 0) {
-            overrideTextureIndex
-        } else {
-            material.baseColorTexture?.textureIndex ?: -1
+        val textureIndex = when {
+            overrideIdentifier != null -> overrideIdentifier.hashCode()
+            overrideTextureIndex >= 0 -> overrideTextureIndex
+            else -> material.baseColorTexture?.textureIndex ?: -1
         }
         val overrideCutoff = override?.alphaCutoff ?: Float.NaN
         val alphaCutoff = if (overrideCutoff.isNaN()) material.alphaCutoff else overrideCutoff
-        val texture = if (overrideTextureIndex >= 0) {
-            textures.identifier(overrideTextureIndex)
-        } else {
-            textures.materialIdentifier(materialIndex)
+        val texture = when {
+            overrideIdentifier != null -> overrideIdentifier
+            overrideTextureIndex >= 0 -> textures.identifier(overrideTextureIndex)
+            else -> textures.materialIdentifier(materialIndex)
         }
         val renderType = GltfRenderTypes.get(
             resource.id,

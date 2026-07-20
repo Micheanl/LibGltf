@@ -10,6 +10,8 @@ class AnimationController(
     var machine: AnimationStateMachine? = null
         private set
 
+    var loopBlendSeconds: Float = 0.0f
+
     var currentState: Int = -1
         private set
 
@@ -65,16 +67,22 @@ class AnimationController(
     ) {
         validate(segment)
         require(durationSeconds >= 0.0f)
-        if (durationSeconds == 0.0f || segment.startSeconds > 0.0f || player.clipIndex < 0) {
+        if (durationSeconds == 0.0f || player.clipIndex < 0) {
             play(segment, looping, speed)
             return
         }
+        val sourceEnd = activeSegment?.endSeconds ?: Float.MAX_VALUE
         pendingSegment = segment
         activeLooping = looping
         paused = false
         player.speed = speed
         player.looping = false
-        player.crossFadeTo(segment.sourceClipIndex, durationSeconds)
+        player.crossFadeTo(
+            segment.sourceClipIndex,
+            durationSeconds,
+            if (speed >= 0.0f) segment.startSeconds else segment.endSeconds,
+            sourceEnd
+        )
     }
 
     fun pause() {
@@ -203,12 +211,16 @@ class AnimationController(
     }
 
     private fun enforceSegment() {
-        if (pendingSegment != null) return
+        if (pendingSegment != null || player.fading) return
         val segment = activeSegment ?: return
         if (player.clipIndex != segment.sourceClipIndex) return
         val duration = segment.durationSeconds
         if (player.speed >= 0.0f && player.timeSeconds >= segment.endSeconds) {
             if (activeLooping && duration > 0.0f) {
+                if (loopBlendSeconds > 0.0f) {
+                    crossFadeTo(segment, loopBlendSeconds, activeLooping, player.speed)
+                    return
+                }
                 val overflow = (player.timeSeconds - segment.startSeconds) % duration
                 player.seek(segment.startSeconds + overflow)
                 player.resume()
@@ -218,6 +230,10 @@ class AnimationController(
             }
         } else if (player.speed < 0.0f && player.timeSeconds <= segment.startSeconds) {
             if (activeLooping && duration > 0.0f) {
+                if (loopBlendSeconds > 0.0f) {
+                    crossFadeTo(segment, loopBlendSeconds, activeLooping, player.speed)
+                    return
+                }
                 val overflow = (segment.endSeconds - player.timeSeconds) % duration
                 player.seek(segment.endSeconds - overflow)
                 player.resume()

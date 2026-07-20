@@ -23,6 +23,7 @@ class AnimationPlayer(private val asset: GltfAsset) {
     private var fadeTimeSeconds: Float = 0.0f
     private var fadeDurationSeconds: Float = 0.0f
     private var fadeElapsedSeconds: Float = 0.0f
+    private var fadeSourceEndSeconds: Float = Float.MAX_VALUE
     private var dirty: Boolean = true
 
     private val restTranslation = FloatArray(asset.nodes.size * 3)
@@ -50,6 +51,9 @@ class AnimationPlayer(private val asset: GltfAsset) {
         evaluate(0.0f)
     }
 
+    val fading: Boolean
+        get() = fadeClipIndex >= 0
+
     fun play(index: Int, loop: Boolean = true, playbackSpeed: Float = 1.0f) {
         require(index in asset.animations.indices)
         clipIndex = index
@@ -57,12 +61,18 @@ class AnimationPlayer(private val asset: GltfAsset) {
         speed = playbackSpeed
         timeSeconds = 0.0f
         fadeClipIndex = -1
+        fadeSourceEndSeconds = Float.MAX_VALUE
         playing = true
         dirty = true
         resetKeys()
     }
 
-    fun crossFadeTo(index: Int, durationSeconds: Float) {
+    fun crossFadeTo(
+        index: Int,
+        durationSeconds: Float,
+        startAtSeconds: Float = 0.0f,
+        sourceEndSeconds: Float = Float.MAX_VALUE
+    ) {
         require(index in asset.animations.indices)
         require(durationSeconds > 0.0f)
         if (clipIndex < 0) {
@@ -70,7 +80,8 @@ class AnimationPlayer(private val asset: GltfAsset) {
             return
         }
         fadeClipIndex = index
-        fadeTimeSeconds = 0.0f
+        fadeTimeSeconds = startAtSeconds.coerceIn(0.0f, asset.animations[index].durationSeconds)
+        fadeSourceEndSeconds = sourceEndSeconds
         fadeDurationSeconds = durationSeconds
         fadeElapsedSeconds = 0.0f
         playing = true
@@ -108,6 +119,7 @@ class AnimationPlayer(private val asset: GltfAsset) {
         if (playing && clipIndex >= 0) {
             val previousTime = timeSeconds
             timeSeconds = normalizeTime(clipIndex, previousTime + deltaSeconds * speed)
+            if (fadeClipIndex >= 0 && timeSeconds > fadeSourceEndSeconds) timeSeconds = fadeSourceEndSeconds
             if (wrapped(previousTime, timeSeconds)) primaryKeys.fill(-1)
             if (timeSeconds != previousTime) changed = true
             if (!looping) {
@@ -124,6 +136,7 @@ class AnimationPlayer(private val asset: GltfAsset) {
                     clipIndex = fadeClipIndex
                     timeSeconds = fadeTimeSeconds
                     fadeClipIndex = -1
+                    fadeSourceEndSeconds = Float.MAX_VALUE
                     secondaryKeys.copyInto(primaryKeys)
                     secondaryKeys.fill(-1)
                 }

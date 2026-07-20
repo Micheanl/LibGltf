@@ -124,6 +124,7 @@ object GltfSceneRenderer {
         if (primitive.skin != null && node.skinIndex < 0) return false
         val sourceMaterialIndex = primitive.materialIndex.coerceIn(0, asset.materials.lastIndex)
         val material = asset.materials[instance.resolveMaterial(sourceMaterialIndex)]
+        if (instance.materialOverrides[sourceMaterialIndex]?.baseColorIdentifier != null) return true
         val overrideTexture = instance.materialOverrides[sourceMaterialIndex]?.baseColorTextureIndex ?: -1
         val textureIndex = if (overrideTexture >= 0) overrideTexture else material.baseColorTexture?.textureIndex ?: -1
         val sampler = asset.textures.getOrNull(textureIndex)?.sampler ?: return true
